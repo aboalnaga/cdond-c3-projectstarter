@@ -26,7 +26,7 @@ jobs:
       - restore_cache:
           keys: [backend-build]
       - run:
-          name: Back-end build
+          name: Build back-end
           command: |
             cd backend
             npm install
@@ -57,12 +57,38 @@ jobs:
       - restore_cache:
           keys: [backend-build]
       - run: 
-          name: test back-end
+          name: Test back-end
           command: |
             cd backend
             npm install
             npm run test
-            
+
+  scan-frontend:
+    docker:
+      - image: cimg/node:13.8.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys: [frontend-build]
+      - run: 
+          name: Scan front-end
+          command: |
+            cd frontend
+            npm audit --audit-level=critical
+
+  scan-backend:
+    docker:
+      - image: cimg/node:13.8.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys: [backend-build]
+      - run: 
+          name: Scan back-end
+          command: |
+            cd backend
+            npm audit --audit-level=critical
+
 workflows:
   default:
     jobs:
@@ -72,3 +98,8 @@ workflows:
           requires: [build-frontend]
       - test-backend:
           requires: [build-backend]
+      - scan-frontend:
+          requires: [build-frontend]
+      - scan-backend:
+          requires: [build-backend]
+
