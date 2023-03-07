@@ -167,6 +167,29 @@ jobs:
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
 
+  configure-infrastructure:
+    docker:
+      - image: cimg/aws:2023.01
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["6a:36:3c:df:8d:88:e6:70:d9:a0:45:8d:0d:8e:ab:a6"]
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get -y update
+            sudo apt-get -y install ansible
+      - run:
+          name: Configure server
+          command: |
+            cd .circleci/ansible
+            ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.txt configure-server.yml
+          no_output_timeout: 15m
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+
   cleanup:
       docker:
         - image: cimg/aws:2023.01
@@ -215,5 +238,7 @@ workflows:
           filters:
             branches:
               only: [test-feature-branch]
-      - cleanup:
+      - configure-infrastructure:
           requires: [deploy-infrastructure]
+      - cleanup:
+          requires: [configure-infrastructure]
