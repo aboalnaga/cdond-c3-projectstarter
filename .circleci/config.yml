@@ -220,6 +220,41 @@ jobs:
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
 
+  deploy-frontend:
+    docker:
+      - image: cimg/node:13.8.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys: [frontend-build]
+      - run:
+          name: Install dependencies
+          command: |
+            if [[ ! -x "$(command -v aws)" ]]; then
+              echo Installing awscli ...
+              sudo apt-get -y update
+              sudo apt-get -y install awscli
+            fi
+      - run:
+          name: Get backend url
+          command: |
+            export BACKEND_IP="$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query "Reservations[*].Instances[*].PublicDnsName" \
+              --output=text)"
+            echo API_URL="http://${BACKEND_IP}:3030" | tee -a frontend/.env
+      - run:
+          name: Build frontend with backend url
+          command: |
+            cd frontend
+            npm run build
+            tar -czvf frontend-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
+      - run:
+          name: Deploy frontend objects
+          command: |
+            aws s3 cp frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
   cleanup:
       docker:
         - image: cimg/aws:2023.01
@@ -244,24 +279,24 @@ jobs:
 workflows:
   default:
     jobs:
-      # - build-frontend:
-      #     context: cdond-c3
-      # - build-backend:
-      #     context: cdond-c3
-      # - test-frontend:
-      #     context: cdond-c3
-      #     requires: [build-frontend]
-      # - test-backend:
-      #     context: cdond-c3
-      #     requires: [build-backend]
-      # - scan-frontend:
-      #     context: cdond-c3
-      #     requires: [build-frontend]
-      # - scan-backend:
-      #     context: cdond-c3
-      #     requires: [build-backend]
+      - build-frontend:
+          context: cdond-c3
+      - build-backend:
+          context: cdond-c3
+      - test-frontend:
+          context: cdond-c3
+          requires: [build-frontend]
+      - test-backend:
+          context: cdond-c3
+          requires: [build-backend]
+      - scan-frontend:
+          context: cdond-c3
+          requires: [build-frontend]
+      - scan-backend:
+          context: cdond-c3
+          requires: [build-backend]
       - deploy-infrastructure:
-          # requires: [test-frontend, test-backend, scan-frontend, scan-backend]
+          requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
             branches:
               only: [test-feature-branch]
@@ -269,5 +304,5 @@ workflows:
           requires: [deploy-infrastructure]
       - run-migrations:
           requires: [configure-infrastructure]
-      - cleanup:
+      - deploy-frontend:
           requires: [run-migrations]
