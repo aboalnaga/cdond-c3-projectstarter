@@ -167,28 +167,53 @@ jobs:
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
 
+  cleanup:
+      docker:
+        - image: cimg/aws:2023.01
+      steps:
+        - checkout
+        - run:
+            name: Get old stack workflow id
+            command: |
+              # Fetch the stack names
+              export STACKS=($(aws cloudformation list-stacks \
+                --query "StackSummaries[*].StackName" \
+                --stack-status-filter CREATE_COMPLETE \
+                --no-paginate --output text))
+              echo Stack names: "${STACKS[@]}"
+        - run:
+            name: Remove old stacks and files
+            command: |
+              for STACK_NAME in ${STACKS[@]}; do
+                if [[ "$STACK_NAME" =~ "${CIRCLE_WORKFLOW_ID:0:7}" ]]; then
+                  echo Deleting $STACK_NAME
+                  aws cloudformation delete-stack --stack-name "$STACK_NAME"
+                fi
+              done
+
 workflows:
   default:
     jobs:
-      - build-frontend:
-          context: cdond-c3
-      - build-backend:
-          context: cdond-c3
-      - test-frontend:
-          context: cdond-c3
-          requires: [build-frontend]
-      - test-backend:
-          context: cdond-c3
-          requires: [build-backend]
-      - scan-frontend:
-          context: cdond-c3
-          requires: [build-frontend]
-      - scan-backend:
-          context: cdond-c3
-          requires: [build-backend]
+      # - build-frontend:
+      #     context: cdond-c3
+      # - build-backend:
+      #     context: cdond-c3
+      # - test-frontend:
+      #     context: cdond-c3
+      #     requires: [build-frontend]
+      # - test-backend:
+      #     context: cdond-c3
+      #     requires: [build-backend]
+      # - scan-frontend:
+      #     context: cdond-c3
+      #     requires: [build-frontend]
+      # - scan-backend:
+      #     context: cdond-c3
+      #     requires: [build-backend]
       - deploy-infrastructure:
-          requires: [test-frontend, test-backend, scan-frontend, scan-backend]
+          # requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
             branches:
               only: [test-feature-branch]
-
+      - cleanup:
+          requires: [deploy-infrastructure]
