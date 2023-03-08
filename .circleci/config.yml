@@ -12,31 +12,44 @@ commands:
         default: "${CIRCLE_WORKFLOW_ID:0:7}"
     steps:
       - run:
-          name: Instal AWS CLI if not found
+          name: Destroy environments
           when: on_fail
           command: |
+            echo "Destroying environment: << parameters.id >>"
+            # Instal AWS CLI if not found
             if [[ ! -x "$(command -v aws)" ]]; then
               echo Installing awscli ...
               sudo apt-get -y update
               sudo apt-get -y install awscli
             fi
-      - run:
-          name: Destroy S3 bucket
-          when: on_fail
-          command: |
+            # Delete files uploaded to S3
             aws s3 rm "s3://udapeople-<<parameters.id>>" --recursive
-      - run:
-          name: Destroy front-end
-          when: on_fail
-          command: |
+            # Destroy front-end
             aws cloudformation delete-stack \
               --stack-name "udapeople-backend-<<parameters.id>>"
-      - run:
-          name: Destroy back-end
-          when: on_fail
-          command: |
+            # Destroy back-end
             aws cloudformation delete-stack \
               --stack-name "udapeople-frontend-<<parameters.id>>"
+
+  revert-migrations:
+    description: Revert the last migration
+    parameters:
+      id:
+        type: string      
+    steps:
+      - run:
+          name: Revert migrations
+          when: on_fail
+          command: |
+            # Example: kvdb.io
+            SUCCESS=$(curl --insecure https://kvdb.io/${KVDB_IO_TOKEN}/migration_<< parameters.id >>)
+            # Logic for reverting the database state
+            if (( $SUCCESS == 1 ));
+            then
+              cd ~/project/backend
+              npm install
+              npm run migration:revert
+            fi  
 
 jobs:
   build-frontend:
@@ -262,6 +275,8 @@ jobs:
             aws s3 cp frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-migrations:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   deploy-backend:
     docker:
@@ -291,16 +306,22 @@ jobs:
               -i inventory.txt deploy-backend.yml
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-migrations:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   smoke-test:
     docker:
-      - image: cimg/aws:2023.01
+      - image: cimg/node:13.8.0
     steps:
       - checkout
       - run:
           name: Install dependencies
           command: |
-            # your code here
+            if [[ ! -x "$(command -v aws)" ]]; then
+              echo Installing awscli ...
+              sudo apt-get -y update
+              sudo apt-get -y install awscli
+            fi
       - run:
           name: Get backend url
           command: |
@@ -333,6 +354,8 @@ jobs:
               exit 1
             fi
       - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+      - revert-migrations:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
 
   cleanup:
