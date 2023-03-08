@@ -174,7 +174,8 @@ jobs:
           command: |
             aws ec2 describe-instances \
             --query "Reservations[*].Instances[*].PublicIpAddress" \
-            --filters "Name=tag:project,Values=udapeople" "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+            --filters "Name=tag:project,Values=udapeople" \
+              "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
             --output=text >> .circleci/ansible/inventory.txt
       - persist_to_workspace:
           root: ~/
@@ -254,13 +255,43 @@ jobs:
           command: |
             cd frontend
             npm run build
-            tar -czvf frontend-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
+            tar -czf ../frontend.tar.gz dist
       - run:
           name: Deploy frontend objects
           command: |
             aws s3 cp frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
+
+  deploy-backend:
+    docker:
+      - image: cimg/node:13.8.0
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["6a:36:3c:df:8d:88:e6:70:d9:a0:45:8d:0d:8e:ab:a6"]
+      - attach_workspace:
+          at: ~/
+      - restore_cache:
+          keys: [backend-build]
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get -y update
+            sudo apt-get -y install ansible
+      - run:
+          name: Deploy backend
+          command: |
+            cd backend
+            npm install
+            npm run build
+            tar -czf ../backend.tar.gz .
+            cd ../.circleci/ansible
+            ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
+              -i inventory.txt deploy-backend.yml
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+
   cleanup:
       docker:
         - image: cimg/aws:2023.01
@@ -313,3 +344,7 @@ workflows:
           requires: [configure-infrastructure]
       - deploy-frontend:
           requires: [run-migrations]
+      - deploy-backend:
+          requires: [run-migrations]
+      # - cleanup:
+      #     requires: [deploy-frontend, deploy-backend]

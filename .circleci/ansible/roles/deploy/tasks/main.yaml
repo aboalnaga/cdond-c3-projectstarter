@@ -1,0 +1,62 @@
+- name: "ensure application directory exists"
+  file:
+    path: ~/app
+    state: directory
+
+- name: "copy application files"
+  unarchive:
+    src: ~/project/backend.tar.gz
+    dest: ~/app
+
+- name: "initialize application configuration"
+  copy:
+    dest: ~/app/pm2.config.js
+    content: |
+      module.exports = {
+        apps : [{
+          name      : 'UdaPeople backend stack',
+          script    : 'npm',
+          args      : ['run', 'start'],
+          env       : {
+            NODE_ENV               : "production",
+            BACKEND_PORT           : 3030,
+            TYPEORM_LOGGING        : true,
+            TYPEORM_HOST           : "{{ lookup('env', 'TYPEORM_HOST') }}",
+            TYPEORM_PORT           : "{{ lookup('env', 'TYPEORM_PORT') }}",
+            TYPEORM_CONNECTION     : "{{ lookup('env', 'TYPEORM_CONNECTION') }}",
+            TYPEORM_USERNAME       : "{{ lookup('env', 'TYPEORM_USERNAME') }}",
+            TYPEORM_PASSWORD       : "{{ lookup('env', 'TYPEORM_PASSWORD') }}",
+            TYPEORM_DATABASE       : "{{ lookup('env', 'TYPEORM_DATABASE') }}",
+            TYPEORM_ENTITIES       : "./src/modules/domain/**/*.entity{.js,.ts}",
+            TYPEORM_MIGRATIONS     : "./src/migrations/*{.js,.ts}",
+            TYPEORM_MIGRATIONS_DIR : "./src/migrations"
+          }
+        }],
+      }
+
+- name: "install older npm"
+  become: true
+  npm:
+    name: npm
+    version: 4.6.1
+    global: yes
+
+- name: "install process manager"
+  become: true
+  npm:
+    name: pm2
+    global: yes
+
+- name: "stop previous servers"
+  command: pm2 stop default
+  ignore_errors: true
+
+- name: "rebuild npm packages"
+  command: 
+    cmd: npm rebuild --update-binary
+    chdir: ~/app
+
+- name: "start application server"
+  command: 
+    cmd: pm2 start pm2.config.js
+    chdir: ~/app
