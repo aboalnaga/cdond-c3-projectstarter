@@ -60,3 +60,54 @@
   command: 
     cmd: pm2 start pm2.config.js
     chdir: ~/app
+
+
+- name: "download node exporter"
+  ignore_errors: true
+  become: true
+  get_url:
+    url: https://github.com/prometheus/node_exporter/releases/download/v1.0.1/node_exporter-1.0.1.linux-amd64.tar.gz
+    dest: ~/node_exporter.tar.gz
+
+- name: "install node exporter"
+  ignore_errors: true
+  become: true
+  unarchive:
+    src: ~/node_exporter.tar.gz
+    dest: /usr/local/bin
+    include: node_exporter
+    remote_src: yes
+
+- name: "add node exporter user"
+  ignore_errors: true
+  become: true
+  command: |
+    sudo useradd --no-create-home node_exporter
+
+- name: "create node exporter service"
+  ignore_errors: true
+  become: true
+  copy:
+    dest: /etc/systemd/system/node-exporter.service
+    content: |
+      [Unit]
+      Description=Prometheus Node Exporter Service
+      After=network.target
+
+      [Service]
+      User=node_exporter
+      Group=node_exporter
+      Type=simple
+      ExecStart=/usr/local/bin/node_exporter
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: "start node exporter service"
+  ignore_errors: true
+  become: true
+  command: |
+    sudo systemctl daemon-reload
+    sudo systemctl enable node-exporter
+    sudo systemctl start node-exporter
+    sudo systemctl status node-exporter
